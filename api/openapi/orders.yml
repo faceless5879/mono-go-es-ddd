@@ -1,0 +1,37 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: EDA order
+  description: TODO
+servers:
+  - url: https://{hostname}/api
+    variables:
+      hostname:
+        default: localhost
+
+paths:
+  /orders:
+    post:
+      operationId: createOrder
+      responses:
+        '200':
+          description: todo
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Error:
+      type: object
+      required:
+        - slug
+        - message
+      properties:
+        slug:
+          type: string
+        message:
+          type: string
