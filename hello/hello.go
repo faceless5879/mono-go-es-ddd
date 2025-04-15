@@ -1,39 +1,86 @@
 package main
 
 import (
+	"context"
 	"log"
-	"net/http"
+	"time"
+
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
+	"github.com/ThreeDotsLabs/watermill/message"
+	_ "github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
 )
 
-// Define a home handler function which writes a byte slice containing
-// "Hello from Snippetbox" as the response body.
-func home(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Hello from Snippetbox"))
-}
-
-func createSnippet(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		w.Header().Set("Allow", "POST")
-		// Use the http.Error() function to send a 405 status code and "Method Not
-		// Allowed" string as the response body.
-		http.Error(w, "Method Not Allowed", 405)
-		return
-	}
-	w.Write([]byte("Creating snippet"))
-}
+var mqURI = "amqp://user:password@localhost:5672/my_vhost"
 
 func main() {
-	// Use the http.NewServeMux() function to initialize a new servemux, then
-	// register the home function as the handler for the "/" URL pattern.
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", home)
-	mux.HandleFunc("/snippet/create", createSnippet)
+	logger := watermill.NewStdLogger(false, false)
 
-	// Use the http.ListenAndServe() function to start a new web server. We pass in
-	// two parameters: the TCP network address to listen on (in this case ":4000")
-	// and the servemux we just created. If http.ListenAndServe() returns an error
-	// we use the log.Fatal() function to log the error message and exit.
-	log.Println("Starting server on :4000")
-	err := http.ListenAndServe(":4000", mux)
-	log.Fatal(err)
+	// RabbitMQ connection config
+	pubConfig := amqp.NewDurablePubSubConfig(mqURI, amqp.GenerateQueueNameTopicName)
+	pubConfig.Exchange.Type = "fanout"
+	// Create a publisher
+	publisher, err := amqp.NewPublisher(pubConfig, logger)
+	if err != nil {
+		panic(err)
+	}
+	defer publisher.Close()
+
+	// Create two subscribers (they will receive the same messages)
+	subscriber1, err := createSubscriber("subscriber-1", logger)
+	if err != nil {
+		panic(err)
+	}
+	defer subscriber1.Close()
+
+	subscriber2, err := createSubscriber("subscriber-2", logger)
+	if err != nil {
+		panic(err)
+	}
+	defer subscriber2.Close()
+
+	// Topic name for our events
+	topic := "events.notifications"
+
+	// Process messages for subscriber 1
+	go processMessages(subscriber1, topic, "Subscriber 1")
+
+	// Process messages for subscriber 2
+	go processMessages(subscriber2, topic, "Subscriber 2")
+
+	// Give some time for subscribers to connect
+	time.Sleep(time.Second)
+
+	// Publish a few messages
+	var i = 0
+	for {
+		i++
+		msg := message.NewMessage(
+			watermill.NewUUID(),
+			[]byte("Hello, this is message #"+string(rune(i+'0'))),
+		)
+
+		if err := publisher.Publish(topic, msg); err != nil {
+			panic(err)
+		}
+		log.Printf("Published message: %s", msg.Payload)
+		time.Sleep(time.Millisecond * 100)
+	}
+}
+
+func createSubscriber(consumerGroup string, logger watermill.LoggerAdapter) (*amqp.Subscriber, error) {
+	// For the fanout behavior (each subscriber gets all messages),
+	// we use different consumer groups
+	return amqp.NewSubscriber(amqp.NewDurablePubSubConfig(mqURI, amqp.GenerateQueueNameTopicNameWithSuffix(consumerGroup)), logger)
+}
+
+func processMessages(subscriber *amqp.Subscriber, topic string, name string) {
+	messages, err := subscriber.Subscribe(context.Background(), topic)
+	if err != nil {
+		panic(err)
+	}
+	for msg := range messages {
+		log.Printf("[%s] received message: %s", name, string(msg.Payload))
+		msg.Ack()
+	}
 }

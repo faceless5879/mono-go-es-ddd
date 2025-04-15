@@ -2,13 +2,11 @@ package main
 
 import (
 	"github.com/faceless5879/mono-go-es-ddd/internal/common/logs"
+	_ "github.com/lib/pq"
 )
 
 func main() {
 	logs.Init()
-
-	//ctx := context.Background()
-
 	//app, cleanup := service.NewApplication(ctx)
 	//defer cleanup()
 	//

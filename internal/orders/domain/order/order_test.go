@@ -13,7 +13,7 @@ func TestOrder_Init(t *testing.T) {
 	orderItems := []order.OrderItem{item}
 	deliveryAddress, _ := order.NewDeliveryAddress("Test", "Test Addr")
 	userUUID := "user id"
-	orderID := uuid.New()
+	orderID := uuid.New().String()
 
 	newOrder, _ := order.NewOrder(orderID)
 	newOrder.Init(userUUID, orderItems, deliveryAddress)

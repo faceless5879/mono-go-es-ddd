@@ -2,12 +2,11 @@ package order
 
 import (
 	es "github.com/faceless5879/mono-go-es-ddd/internal/common/event_sourcing"
-	"github.com/google/uuid"
 	"time"
 )
 
 type Order struct {
-	uuid       uuid.UUID
+	uuid       string
 	uncommited []es.Event
 	version    int
 
@@ -18,15 +17,15 @@ type Order struct {
 	createdAt       time.Time
 }
 
-func NewOrder(uuid uuid.UUID) (*Order, error) {
-	return &Order{uuid: uuid}, nil
+func NewOrder(ID string) (*Order, error) {
+	return &Order{uuid: ID}, nil
 }
 
 func (o *Order) incrementVersion() {
 	o.version++
 }
 
-func (o *Order) ID() uuid.UUID {
+func (o *Order) ID() string {
 	return o.uuid
 }
 
@@ -65,7 +64,7 @@ func (o *Order) ApplyChange(event es.Event, loadFromHistory bool) {
 		o.uuid = e.OrderID
 		o.orderItems = e.OrderItems
 		o.deliveryAddress, _ = NewDeliveryAddress(e.ReceiverName, e.DeliveryAddress)
-		o.createdAt = e.CreatedAt
+		o.createdAt = e.TimeStamp()
 		if !loadFromHistory {
 			o.uncommited = append(o.uncommited, e)
 		}
@@ -76,12 +75,11 @@ const OrderCreated es.EventType = "ORDER_CREATED"
 
 type OrderCreatedEvent struct {
 	es.BaseEvent
-	OrderID         uuid.UUID
+	OrderID         string
 	UserUUID        string
 	ReceiverName    string
 	DeliveryAddress string
 	OrderItems      []OrderItem
-	CreatedAt       time.Time
 }
 
 func (e OrderCreatedEvent) EventType() es.EventType {
@@ -103,6 +101,5 @@ func (o *Order) Init(userUUID string, orderItems []OrderItem, deliveryAddress De
 		ReceiverName:    deliveryAddress.ReceiverName(),
 		DeliveryAddress: deliveryAddress.Address(),
 		OrderItems:      orderItems,
-		CreatedAt:       now,
 	}, false)
 }
