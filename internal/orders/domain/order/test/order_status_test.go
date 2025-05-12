@@ -1,4 +1,4 @@
-package order_test
+package test_test
 
 import (
 	"github.com/faceless5879/mono-go-es-ddd/internal/orders/domain/order"

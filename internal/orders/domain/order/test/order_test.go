@@ -1,4 +1,4 @@
-package order_test
+package test_test
 
 import (
 	"github.com/faceless5879/mono-go-es-ddd/internal/orders/domain/order"
@@ -15,7 +15,7 @@ func TestOrder_Init(t *testing.T) {
 	userUUID := "user id"
 	orderID := uuid.New().String()
 
-	newOrder, _ := order.NewOrder(orderID)
+	newOrder := order.NewOrder(orderID)
 	newOrder.Init(userUUID, orderItems, deliveryAddress)
 	events := newOrder.GetUncommitedEvents()
 
