@@ -1,6 +1,7 @@
 package servers
 
 import (
+	"fmt"
 	"github.com/faceless5879/mono-go-es-ddd/internal/common/logs"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -23,7 +24,7 @@ func RunHTTPServerOnAddr(addr string, createHandler func(router chi.Router) http
 	// we are mounting all APIs under /api path
 	rootRouter.Mount("/api", createHandler(apiRouter))
 
-	logrus.Info("Starting HTTP server")
+	logrus.Info(fmt.Sprintf("Starting HTTP server on port: %s", os.Getenv("PORT")))
 
 	err := http.ListenAndServe(addr, rootRouter)
 	if err != nil {
