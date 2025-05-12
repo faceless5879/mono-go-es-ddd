@@ -4,7 +4,7 @@ info:
   title: EDA order
   description: TODO
 servers:
-  - url: https://{hostname}/api
+  - url: http://{hostname}/api
     variables:
       hostname:
         default: localhost
@@ -13,6 +13,13 @@ paths:
   /orders:
     post:
       operationId: createOrder
+      requestBody:
+        description: todo
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrder'
       responses:
         '200':
           description: todo
@@ -25,6 +32,28 @@ paths:
 
 components:
   schemas:
+    CreateOrder:
+      type: object
+      required: [orderItems, userUUID, receiverName, deliveryAddress]
+      properties:
+        userUUID:
+          type: string
+        receiverName:
+          type: string
+        deliveryAddress:
+          type: string
+        orderItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+    OrderItem:
+      type: object
+      required: [skuID, quantity]
+      properties:
+        skuID:
+          type: string
+        quantity:
+          type: integer
     Error:
       type: object
       required:
