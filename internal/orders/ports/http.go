@@ -1,7 +1,7 @@
 package ports
 
 import (
-	"github.com/faceless5879/mono-go-es-ddd/internal/common/servers/httperr"
+	"github.com/faceless5879/mono-go-es-ddd/internal/common/server/httperr"
 	"github.com/faceless5879/mono-go-es-ddd/internal/orders/app"
 	"github.com/faceless5879/mono-go-es-ddd/internal/orders/app/command"
 	"github.com/go-chi/render"
