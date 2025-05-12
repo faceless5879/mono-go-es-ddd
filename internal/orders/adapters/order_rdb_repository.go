@@ -8,13 +8,27 @@ import (
 	"github.com/faceless5879/mono-go-es-ddd/internal/orders/models"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 )
 
 type OrderRdbRepository struct {
-	tx *sqlx.Tx
+	db *sqlx.DB
 }
 
-func (r *OrderRdbRepository) SaveEvents(ctx context.Context, events []es.Event) error {
+func NewOrderRdbRepository(db *sqlx.DB) *OrderRdbRepository {
+	return &OrderRdbRepository{db: db}
+}
+
+// SaveEvents use named return values. If return value is error instead of (err error),　defer block cannot handle query result
+func (r OrderRdbRepository) SaveEvents(ctx context.Context, events []es.Event) (err error) {
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return errors.Wrap(err, "unable to start transaction")
+	}
+	defer func() {
+		err = r.finishTransaction(err, tx)
+	}()
 	query := `INSERT INTO order_events (id, order_id, event_type, data, time_stamp) VALUES ($1,$2,$3,$4,$5)`
 	for _, event := range events {
 		switch e := event.(type) {
@@ -23,18 +37,14 @@ func (r *OrderRdbRepository) SaveEvents(ctx context.Context, events []es.Event) 
 			for _, oi := range e.OrderItems {
 				orderItems = append(orderItems, models.OrderItem{SkuID: oi.SkuID(), Quantity: oi.Quantity()})
 			}
-			jsonData, err := json.Marshal(models.OrderCreatedEventData{
+			jsonData, _ := json.Marshal(models.OrderCreatedEventData{
 				UserUUID:        e.UserUUID,
 				ReceiverName:    e.ReceiverName,
 				OrderItems:      orderItems,
 				DeliveryAddress: e.DeliveryAddress,
 			})
 
-			if err != nil {
-				return err
-			}
-
-			if _, err := r.tx.Exec(query, uuid.New(), e.OrderID, e.EventType(), jsonData, e.TimeStamp()); err != nil {
+			if _, err := tx.Exec(query, uuid.New(), e.OrderID, e.EventType(), jsonData, e.TimeStamp()); err != nil {
 				return err
 			}
 		}
@@ -42,27 +52,40 @@ func (r *OrderRdbRepository) SaveEvents(ctx context.Context, events []es.Event) 
 	return nil
 }
 
-func (r *OrderRdbRepository) LoadEvents(ctx context.Context, aggregateID string) ([]es.Event, error) {
+func (r OrderRdbRepository) LoadEvents(ctx context.Context, aggregateID string) (events []es.Event, err error) {
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return []es.Event{}, errors.Wrap(err, "unable to start transaction")
+	}
+	defer func() {
+		err = r.finishTransaction(err, tx)
+	}()
+
 	query := `SELECT * FROM order_events WHERE order_id = $1`
 	var dModels []models.OrderEvent
 
-	rows, err := r.tx.Query(query, aggregateID)
+	rows, err := tx.Query(query, aggregateID)
 	if err != nil {
-		return nil, err
+		return []es.Event{}, err
 	}
 
 	for rows.Next() {
 		var dm models.OrderEvent
 		if err := rows.Scan(&dm.ID, &dm.OrderID, &dm.EventType, &dm.Data, &dm.TimeStamp); err != nil {
-			return nil, err
+			return []es.Event{}, err
 		}
 		dModels = append(dModels, dm)
 	}
 
-	return r.convertToDomainEvents(dModels)
+	events, err = r.convertToDomainEvents(dModels)
+	if err != nil {
+		return []es.Event{}, err
+	} else {
+		return events, nil
+	}
 }
 
-func (r *OrderRdbRepository) convertToDomainEvents(events []models.OrderEvent) ([]es.Event, error) {
+func (r OrderRdbRepository) convertToDomainEvents(events []models.OrderEvent) ([]es.Event, error) {
 	var res []es.Event
 	for _, e := range events {
 		if e.EventType == "ORDER_CREATED" {
@@ -91,4 +114,25 @@ func (r *OrderRdbRepository) convertToDomainEvents(events []models.OrderEvent) (
 		}
 	}
 	return res, nil
+}
+
+// finishTransaction rollbacks transaction if error is provided.
+// If err is nil transaction is committed.
+//
+// If the rollback fails, we are using multierr library to add error about rollback failure.
+// If the commit fails, commit error is returned.
+func (r OrderRdbRepository) finishTransaction(err error, tx *sqlx.Tx) error {
+	if err != nil {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return multierr.Combine(err, rollbackErr)
+		}
+
+		return err
+	} else {
+		if commitErr := tx.Commit(); commitErr != nil {
+			return errors.Wrap(err, "failed to commit tx")
+		}
+
+		return nil
+	}
 }
