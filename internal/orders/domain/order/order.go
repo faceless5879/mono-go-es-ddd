@@ -17,8 +17,8 @@ type Order struct {
 	createdAt       time.Time
 }
 
-func NewOrder(ID string) (*Order, error) {
-	return &Order{uuid: ID}, nil
+func NewOrder(ID string) *Order {
+	return &Order{uuid: ID}
 }
 
 func (o *Order) incrementVersion() {
